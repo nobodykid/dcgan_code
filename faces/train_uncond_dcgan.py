@@ -147,12 +147,12 @@ d_updates = d_updater(discrim_params, d_cost)
 g_updates = g_updater(gen_params, g_cost)
 updates = d_updates + g_updates
 
-print 'COMPILING'
+print('COMPILING')
 t = time()
 _train_g = theano.function([X, Z], cost, updates=g_updates)
 _train_d = theano.function([X, Z], cost, updates=d_updates)
 _gen = theano.function([Z], gX)
-print '%.2f seconds to compile theano functions'%(time()-t)
+print('%.2f seconds to compile theano functions'%(time()-t))
 
 vis_idxs = py_rng.sample(np.arange(len(vaX)), nvis)
 vaX_vis = inverse_transform(vaX[vis_idxs])
@@ -189,7 +189,7 @@ log_fields = [
 
 vaX = vaX.reshape(len(vaX), -1)
 
-print desc.upper()
+print(desc.upper())
 n_updates = 0
 n_check = 0
 n_epochs = 0
@@ -214,7 +214,7 @@ for epoch in range(niter):
     va_nnd_10k = nnd_score(gX[:10000], vaX, metric='euclidean')
     va_nnd_100k = nnd_score(gX[:100000], vaX, metric='euclidean')
     log = [n_epochs, n_updates, n_examples, time()-t, va_nnd_1k, va_nnd_10k, va_nnd_100k, g_cost, d_cost]
-    print '%.0f %.2f %.2f %.2f %.4f %.4f'%(epoch, va_nnd_1k, va_nnd_10k, va_nnd_100k, g_cost, d_cost)
+    print('%.0f %.2f %.2f %.2f %.4f %.4f'%(epoch, va_nnd_1k, va_nnd_10k, va_nnd_100k, g_cost, d_cost))
     f_log.write(json.dumps(dict(zip(log_fields, log)))+'\n')
     f_log.flush()
 

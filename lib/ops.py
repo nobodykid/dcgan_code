@@ -1,13 +1,19 @@
 import theano
 import theano.tensor as T
-from theano.sandbox.cuda.basic_ops import (as_cuda_ndarray_variable,
-                                           host_from_gpu,
+from theano.gpuarray.basic_ops import (as_gpuarray_variable,
+                                           HostFromGpu,
                                            gpu_contiguous, HostFromGpu,
-                                           gpu_alloc_empty)
-from theano.sandbox.cuda.dnn import GpuDnnConvDesc, GpuDnnConv, GpuDnnConvGradI, dnn_conv, dnn_pool
+                                           GpuAllocEmpty)
+from theano.gpuarray.dnn import GpuDnnConvDesc, GpuDnnConv, GpuDnnConvGradI, dnn_conv # dnn_pool
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-from rng import t_rng
+# fix from Theano
+from theano.tensor.signal.pool import pool_2d   # fix for dnn_pool
+
+# alternative for deconv
+from theano.tensor.nnet import abstract_conv
+
+from lib.rng import t_rng
 
 t_rng = RandomStreams()
 
@@ -87,10 +93,19 @@ def deconv(X, w, subsample=(1, 1), border_mode=(0, 0), conv_mode='conv'):
     sets up dummy convolutional forward pass and uses its grad as deconv
     currently only tested/working with same padding
     """
-    img = gpu_contiguous(X)
-    kerns = gpu_contiguous(w)
-    desc = GpuDnnConvDesc(border_mode=border_mode, subsample=subsample,
-                          conv_mode=conv_mode)(gpu_alloc_empty(img.shape[0], kerns.shape[1], img.shape[2]*subsample[0], img.shape[3]*subsample[1]).shape, kerns.shape)
-    out = gpu_alloc_empty(img.shape[0], kerns.shape[1], img.shape[2]*subsample[0], img.shape[3]*subsample[1])
-    d_img = GpuDnnConvGradI()(kerns, img, out, desc)
+
+    # TODO: Fix this part of code (check https://github.com/Theano/Theano/issues/6639)
+    # img = gpu_contiguous(X)
+    # kerns = gpu_contiguous(w)
+    # desc = GpuDnnConvDesc(border_mode=border_mode, subsample=subsample, conv_mode=conv_mode)(GpuAllocEmpty(img.shape[0], kerns.shape[1], img.shape[2]*subsample[0], img.shape[3]*subsample[1]).shape, kerns.shape)
+    # out = GpuAllocEmpty(img.shape[0], kerns.shape[1], img.shape[2]*subsample[0], img.shape[3]*subsample[1])
+    # d_img = GpuDnnConvGradI()(kerns, img, out, desc)
+
+    d_img = abstract_conv.conv2d_grad_wrt_inputs(
+        output_grad=X, filters=w, 
+        # input_shape=(X.shape[0], w.shape[1], X.shape[2]*subsample[0], X.shape[3]*subsample[1]),
+        filter_shape=w.shape, 
+        border_mode=border_mode,
+        subsample=subsample)
+
     return d_img

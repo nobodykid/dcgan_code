@@ -14,7 +14,10 @@ from sklearn.svm import LinearSVC as LSVC
 
 import theano
 import theano.tensor as T
-from theano.sandbox.cuda.dnn import dnn_conv, dnn_pool
+from theano.gpuarray.dnn import dnn_conv, # dnn_pool
+
+# fix from theano
+from theano.tensor.signal.pool import pool_2d   # fix for dnn_pool
 
 from lib import activations
 from lib import updates
@@ -44,8 +47,8 @@ X = T.tensor4()
 desc = 'svhn_unsup_all_conv_dcgan_100z_gaussian_lr_0.0005_64mb'
 epoch = 200
 params = [sharedX(p) for p in joblib.load('../models/%s/%d_discrim_params.jl'%(desc, epoch))]
-print desc.upper()
-print 'epoch %d'%epoch
+print(desc.upper())
+print('epoch %d'%epoch)
 
 def mean_and_var(X):
     u = T.mean(X, axis=[0, 2, 3])
@@ -92,9 +95,9 @@ def model(X,
     h = lrelu(dnn_conv(X, w, subsample=(2, 2), border_mode=(2, 2)))
     h2 = lrelu(batchnorm(dnn_conv(h, w2, subsample=(2, 2), border_mode=(2, 2)), g=g2, b=b2, u=h2_u, s=h2_s))
     h3 = lrelu(batchnorm(dnn_conv(h2, w3, subsample=(2, 2), border_mode=(2, 2)), g=g3, b=b3, u=h3_u, s=h3_s))
-    h = T.flatten(dnn_pool(h, (4, 4), (4, 4), mode='max'), 2)
-    h2 = T.flatten(dnn_pool(h2, (2, 2), (2, 2), mode='max'), 2)
-    h3 = T.flatten(dnn_pool(h3, (1, 1), (1, 1), mode='max'), 2)
+    h = T.flatten(pool_2d(h, (4, 4), (4, 4), mode='max'), 2)
+    h2 = T.flatten(pool_2d(h2, (2, 2), (2, 2), mode='max'), 2)
+    h3 = T.flatten(pool_2d(h3, (1, 1), (1, 1), mode='max'), 2)
     f = T.concatenate([h, h2, h3], axis=1)
     return [f]
 
@@ -144,10 +147,10 @@ for c in cs:
         tr_accs.append(100*(1-tr_acc))
         va_accs.append(100*(1-va_acc))
     mean_va_accs.append(np.mean(va_accs))
-    print 'c: %.4f train: %.4f %.4f valid: %.4f %.4f'%(c, np.mean(tr_accs), np.std(tr_accs)*1.96, np.mean(va_accs), np.std(va_accs)*1.96)
+    print('c: %.4f train: %.4f %.4f valid: %.4f %.4f'%(c, np.mean(tr_accs), np.std(tr_accs)*1.96, np.mean(va_accs), np.std(va_accs)*1.96))
 best_va_idx = np.argmin(mean_va_accs)
 best_va_c = cs[best_va_idx]
-print 'best c: %.4f'%best_va_c
+print('best c: %.4f'%best_va_c)
 teXt = features(teX)
 
 tr_accs = []
@@ -173,4 +176,4 @@ for _ in tqdm(range(100), leave=False, ncols=80):
     tr_accs.append(100*(1-tr_acc))
     va_accs.append(100*(1-va_acc))
     te_accs.append(100*(1-te_acc))
-print 'train: %.4f %.4f valid: %.4f %.4f test: %.4f %.4f'%(np.mean(tr_accs), np.std(tr_accs)*1.96, np.mean(va_accs), np.std(va_accs)*1.96, np.mean(te_accs), np.std(te_accs)*1.96)
+print('train: %.4f %.4f valid: %.4f %.4f test: %.4f %.4f'%(np.mean(tr_accs), np.std(tr_accs)*1.96, np.mean(va_accs), np.std(va_accs)*1.96, np.mean(te_accs), np.std(te_accs)*1.96))

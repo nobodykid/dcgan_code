@@ -11,7 +11,7 @@ from sklearn.externals import joblib
 
 import theano
 import theano.tensor as T
-from theano.sandbox.cuda.dnn import dnn_conv
+from theano.gpuarray.dnn import dnn_conv
 
 from lib import activations
 from lib import updates
@@ -64,59 +64,82 @@ if not os.path.exists(model_dir):
 if not os.path.exists(samples_dir):
     os.makedirs(samples_dir)
 
+# define activation functions
 relu = activations.Rectify()
 sigmoid = activations.Sigmoid()
 lrelu = activations.LeakyRectify()
 bce = T.nnet.binary_crossentropy
 
+
 gifn = inits.Normal(scale=0.02)
 difn = inits.Normal(scale=0.02)
 
+# initialize for generator weight
 gw  = gifn((nz+ny, ngfc), 'gw')
 gw2 = gifn((ngfc+ny, ngf*2*7*7), 'gw2')
 gw3 = gifn((ngf*2+ny, ngf, 5, 5), 'gw3')
 gwx = gifn((ngf+ny, nc, 5, 5), 'gwx')
 
+# initialize for discriminator weight
 dw  = difn((ndf, nc+ny, 5, 5), 'dw')
 dw2 = difn((ndf*2, ndf+ny, 5, 5), 'dw2')
 dw3 = difn((ndf*2*7*7+ny, ndfc), 'dw3')
 dwy = difn((ndfc+ny, 1), 'dwy')
 
+# setting params for G and D
 gen_params = [gw, gw2, gw3, gwx]
 discrim_params = [dw, dw2, dw3, dwy]
 
+# define G neural structure
 def gen(Z, Y, w, w2, w3, wx):
-    yb = Y.dimshuffle(0, 1, 'x', 'x')
-    Z = T.concatenate([Z, Y], axis=1)
+    yb = Y.dimshuffle(0, 1, 'x', 'x') # conditional class to be concatenated
+
+    Z = T.concatenate([Z, Y], axis=1) # create latent var from concatenating Z noise and class Y
+    
+    # first layer
     h = relu(batchnorm(T.dot(Z, w)))
     h = T.concatenate([h, Y], axis=1)
+
+    # second layer
     h2 = relu(batchnorm(T.dot(h, w2)))
     h2 = h2.reshape((h2.shape[0], ngf*2, 7, 7))
     h2 = conv_cond_concat(h2, yb)
+
+    # final layer
     h3 = relu(batchnorm(deconv(h2, w3, subsample=(2, 2), border_mode=(2, 2))))
     h3 = conv_cond_concat(h3, yb)
     x = sigmoid(deconv(h3, wx, subsample=(2, 2), border_mode=(2, 2)))
     return x
 
+# define D neural structure
 def discrim(X, Y, w, w2, w3, wy):
-    yb = Y.dimshuffle(0, 1, 'x', 'x')
-    X = conv_cond_concat(X, yb)
+    yb = Y.dimshuffle(0, 1, 'x', 'x') # conditional class to be concatenated
+
+    X = conv_cond_concat(X, yb) # concat class information into image
+
+    # first layer
     h = lrelu(dnn_conv(X, w, subsample=(2, 2), border_mode=(2, 2)))
     h = conv_cond_concat(h, yb)
+
+    # second layer
     h2 = lrelu(batchnorm(dnn_conv(h, w2, subsample=(2, 2), border_mode=(2, 2))))
     h2 = T.flatten(h2, 2)
     h2 = T.concatenate([h2, Y], axis=1)
+
+    # final layer
     h3 = lrelu(batchnorm(T.dot(h2, w3)))
     h3 = T.concatenate([h3, Y], axis=1)
     y = sigmoid(T.dot(h3, wy))
     return y
 
-X = T.tensor4()
-Z = T.matrix()
-Y = T.matrix()
+X = T.tensor4()     # image placeholder (G output and D input)
+Z = T.matrix()      # noise vector
+Y = T.matrix()      # class condition
 
+# output of G
 gX = gen(Z, Y, *gen_params)
 
+# output of D
 p_real = discrim(X, Y, *discrim_params)
 p_gen = discrim(gX, Y, *discrim_params)
 
@@ -127,21 +150,22 @@ g_cost_d = bce(p_gen, T.ones(p_gen.shape)).mean()
 d_cost = d_cost_real + d_cost_gen
 g_cost = g_cost_d
 
+# cost value of DCGAN
 cost = [g_cost, d_cost, g_cost_d, d_cost_real, d_cost_gen]
 
 lrt = sharedX(lr)
 d_updater = updates.Adam(lr=lrt, b1=b1, regularizer=updates.Regularizer(l2=l2))
 g_updater = updates.Adam(lr=lrt, b1=b1, regularizer=updates.Regularizer(l2=l2))
 d_updates = d_updater(discrim_params, d_cost)
-g_updates = g_updater(gen_params, g_cost)
+g_updates =  g_updater(gen_params, g_cost)
 updates = d_updates + g_updates
 
-print 'COMPILING'
+print('COMPILING')
 t = time()
 _train_g = theano.function([X, Z, Y], cost, updates=g_updates)
 _train_d = theano.function([X, Z, Y], cost, updates=d_updates)
 _gen = theano.function([Z, Y], gX)
-print '%.2f seconds to compile theano functions'%(time()-t)
+print('%.2f seconds to compile theano functions'%(time()-t))
 
 tr_idxs = np.arange(len(trX))
 trX_vis = np.asarray([[trX[i] for i in py_rng.sample(tr_idxs[trY==y], 20)] for y in range(10)]).reshape(200, -1)
@@ -186,7 +210,7 @@ log_fields = [
     'd_cost',
 ]
 
-print desc.upper()
+print(desc.upper())
 n_updates = 0
 n_check = 0
 n_epochs = 0
@@ -217,7 +241,7 @@ for epoch in range(1, niter+niter_decay+1):
         va_nnd_10k = nnd_score(gX[:10000], vaX, metric='euclidean')
         va_nnd_100k = nnd_score(gX[:100000], vaX, metric='euclidean')
         log = [n_epochs, n_updates, n_examples, time()-t, va_nnc_acc_1k, va_nnc_acc_10k, va_nnc_acc_100k, va_nnd_1k, va_nnd_10k, va_nnd_100k, g_cost, d_cost]
-        print '%.0f %.2f %.2f %.2f %.4f %.4f %.4f %.4f %.4f'%(epoch, va_nnc_acc_1k, va_nnc_acc_10k, va_nnc_acc_100k, va_nnd_1k, va_nnd_10k, va_nnd_100k, g_cost, d_cost)
+        print('%.0f %.2f %.2f %.2f %.4f %.4f %.4f %.4f %.4f'%(epoch, va_nnc_acc_1k, va_nnc_acc_10k, va_nnc_acc_100k, va_nnd_1k, va_nnd_10k, va_nnd_100k, g_cost, d_cost))
         f_log.write(json.dumps(dict(zip(log_fields, log)))+'\n')
         f_log.flush()
 
