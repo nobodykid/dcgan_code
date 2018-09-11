@@ -1,6 +1,6 @@
 # Deep Convolutional GAN (DCGAN)
 
-This is a modification of [original DCGAN code](https://github.com/Newmu/dcgan_code) by [Alec Radford]((https://github.com/newmu)). proposed in the paper : [http://arxiv.org/abs/1511.06434](http://arxiv.org/abs/1511.06434)
+This is a source code of Deep Convolutional Generative Adversarial Network (DCGAN), forked from the [original implementation of DCGAN](https://github.com/Newmu/dcgan_code) as proposed by [Alec Radford]((https://github.com/newmu)) on his paper : [http://arxiv.org/abs/1511.06434](http://arxiv.org/abs/1511.06434)
 
 ![](images/lsun_bedrooms_generator.png)
 
